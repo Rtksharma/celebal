@@ -1,0 +1,229 @@
+{
+  "name": "LocalSqlServer",
+  "properties": {
+    "type": "SqlServer",
+    "typeProperties": {
+      "connectionString": "your_local_connection_string"
+    },
+    "connectVia": {
+      "referenceName": "SelfHostedIR",
+      "type": "IntegrationRuntimeReference"
+    }
+  }
+}
+{
+  "name": "AzureSqlDb",
+  "properties": {
+    "type": "AzureSqlDatabase",
+    "typeProperties": {
+      "connectionString": "your_azure_sql_db_connection_string"
+    }
+  }
+}
+Pipeline to Copy Data:
+
+json
+
+{
+  "name": "CopyDataPipeline",
+  "properties": {
+    "activities": [
+      {
+        "name": "CopyDataActivity",
+        "type": "Copy",
+        "inputs": [
+          {
+            "referenceName": "LocalSqlServerDataset",
+            "type": "DatasetReference"
+          }
+        ],
+        "outputs": [
+          {
+            "referenceName": "AzureSqlDbDataset",
+            "type": "DatasetReference"
+          }
+        ],
+        "typeProperties": {
+          "source": {
+            "type": "SqlSource"
+          },
+          "sink": {
+            "type": "SqlSink"
+          }
+        }
+      }
+    ]
+  }
+}
+2. Configure FTP/SFTP Server and Create ADF Pipeline for Data Extraction
+
+Set Up FTP/SFTP Server:
+
+Configure an FTP/SFTP server on your local or cloud environment.
+Create Linked Service for FTP/SFTP:
+
+Create Linked Services in ADF for the FTP/SFTP server.
+Create a Pipeline:
+
+Create a pipeline to copy data from the FTP/SFTP server to the desired destination.
+
+Linked Service for FTP:
+
+json
+
+{
+  "name": "FtpServer",
+  "properties": {
+    "type": "FtpServer",
+    "typeProperties": {
+      "host": "your_ftp_host",
+      "port": 21,
+      "username": "your_username",
+      "password": {
+        "type": "SecureString",
+        "value": "your_password"
+      }
+    }
+  }
+}
+Pipeline to Copy Data from FTP:
+
+json
+
+{
+  "name": "CopyDataFromFtpPipeline",
+  "properties": {
+    "activities": [
+      {
+        "name": "CopyDataFromFtp",
+        "type": "Copy",
+        "inputs": [
+          {
+            "referenceName": "FtpSourceDataset",
+            "type": "DatasetReference"
+          }
+        ],
+        "outputs": [
+          {
+            "referenceName": "AzureSqlDbDataset",
+            "type": "DatasetReference"
+          }
+        ],
+        "typeProperties": {
+          "source": {
+            "type": "FtpSource"
+          },
+          "sink": {
+            "type": "SqlSink"
+          }
+        }
+      }
+    ]
+  }
+}
+3. Create Incremental Load Pipeline and Automate This on a Daily Basis
+
+Create an Incremental Load Pipeline:
+
+Create a pipeline that uses a watermark (e.g., last modified date) to only copy new or changed records.
+Schedule the Pipeline:
+
+Schedule the pipeline to run daily using ADF triggers.
+
+Incremental Load Pipeline:
+
+json
+
+{
+  "name": "IncrementalLoadPipeline",
+  "properties": {
+    "activities": [
+      {
+        "name": "IncrementalLoadActivity",
+        "type": "Copy",
+        "inputs": [
+          {
+            "referenceName": "LocalSqlServerDataset",
+            "type": "DatasetReference"
+          }
+        ],
+        "outputs": [
+          {
+            "referenceName": "AzureSqlDbDataset",
+            "type": "DatasetReference"
+          }
+        ],
+        "typeProperties": {
+          "source": {
+            "type": "SqlSource",
+            "sqlReaderQuery": "SELECT * FROM Table WHERE ModifiedDate > @Watermark"
+          },
+          "sink": {
+            "type": "SqlSink"
+          }
+        }
+      }
+    ]
+  }
+}
+Daily Trigger:
+
+json{
+  "name": "DailyTrigger",
+  "properties": {
+    "type": "ScheduleTrigger",
+    "typeProperties": {
+      "recurrence": {
+        "frequency": "Day",
+        "interval": 1
+      }
+    },
+    "pipelines": [
+      {
+        "pipelineReference": {
+          "referenceName": "IncrementalLoadPipeline",
+          "type": "PipelineReference"
+        }
+      }
+    ]
+  }
+}
+4. Automate a Pipeline to Trigger Every Last Saturday of the Month
+:
+Create a Pipeline:
+
+Create the pipeline you want to trigger.
+Schedule the Pipeline:
+
+Use a schedule trigger with cron expression to run on the last Saturday of every month.
+
+Monthly Trigger:
+json
+Copy code
+{
+  "name": "LastSaturdayTrigger",
+  "properties": {
+    "type": "ScheduleTrigger",
+    "typeProperties": {
+      "recurrence": {
+        "frequency": "Month",
+        "interval": 1,
+        "startTime": "2024-07-27T00:00:00Z",
+        "schedule": {
+          "hours": [0],
+          "minutes": [0],
+          "weekDays": ["Saturday"],
+          "monthDays": [-1]
+        }
+      }
+    },
+    "pipelines": [
+      {
+        "pipelineReference": {
+          "referenceName": "YourMonthlyPipeline",
+          "type": "PipelineReference"
+        }
+      }
+    ]
+  }
+}
