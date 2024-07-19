@@ -1,0 +1,155 @@
+{
+    "name": "AzureSqlDbLinkedService",
+    "properties": {
+        "type": "AzureSqlDatabase",
+        "typeProperties": {
+            "connectionString": "Server=tcp:yourserver.database.windows.net,1433;Initial Catalog=yourdatabase;Persist Security Info=False;User ID=yourusername;Password=yourpassword;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+        }
+    }
+}
+{
+    "name": "SqlCustomerTable",
+    "properties": {
+        "linkedServiceName": {
+            "referenceName": "AzureSqlDbLinkedService",
+            "type": "LinkedServiceReference"
+        },
+        "type": "AzureSqlTable",
+        "typeProperties": {
+            "tableName": "Customer"
+        }
+    }
+}
+{
+    "name": "CopyCustomerDataPipeline",
+    "properties": {
+        "activities": [
+            {
+                "name": "GetRecordCount",
+                "type": "Lookup",
+                "typeProperties": {
+                    "source": {
+                        "type": "AzureSqlSource",
+                        "query": "SELECT COUNT(*) AS RecordCount FROM Customer"
+                    },
+                    "dataset": {
+                        "referenceName": "SqlCustomerTable",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "IfCondition",
+                "type": "IfCondition",
+                "typeProperties": {
+                    "expression": {
+                        "value": "@greater(activity('GetRecordCount').output.firstRow.RecordCount, 500)",
+                        "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                        {
+                            "name": "CopyCustomerData",
+                            "type": "Copy",
+                            "typeProperties": {
+                                "source": {
+                                    "type": "AzureSqlSource"
+                                },
+                                "sink": {
+                                    "type": "BlobSink",
+                                    "blobWriterOverwriteFiles": true
+                                }
+                            },
+                            "inputs": [
+                                {
+                                    "referenceName": "SqlCustomerTable",
+                                    "type": "DatasetReference"
+                                }
+                            ],
+                            "outputs": [
+                                {
+                                    "referenceName": "ADLSOutputDataset",
+                                    "type": "DatasetReference"
+                                }
+                            ],
+                            "dependsOn": [
+                                {
+                                    "activity": "GetRecordCount",
+                                    "dependencyConditions": ["Succeeded"]
+                                }
+                            ]
+                        },
+                        {
+                            "name": "ExecuteChildPipeline",
+                            "type": "ExecutePipeline",
+                            "typeProperties": {
+                                "pipeline": {
+                                    "referenceName": "CopyProductDataPipeline",
+                                    "type": "PipelineReference"
+                                },
+                                "parameters": {
+                                    "customerCount": "@activity('GetRecordCount').output.firstRow.RecordCount"
+                                }
+                            },
+                            "dependsOn": [
+                                {
+                                    "activity": "CopyCustomerData",
+                                    "dependencyConditions": ["Succeeded"]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+}
+{
+    "name": "CopyProductDataPipeline",
+    "properties": {
+        "parameters": {
+            "customerCount": {
+                "type": "int"
+            }
+        },
+        "activities": [
+            {
+                "name": "GetCustomerCount",
+                "type": "IfCondition",
+                "typeProperties": {
+                    "expression": {
+                        "value": "@greaterOrEquals(pipeline().parameters.customerCount, 600)",
+                        "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                        {
+                            "name": "CopyProductData",
+                            "type": "Copy",
+                            "typeProperties": {
+                                "source": {
+                                    "type": "AzureSqlSource",
+                                    "query": "SELECT * FROM Product"
+                                },
+                                "sink": {
+                                    "type": "BlobSink",
+                                    "blobWriterOverwriteFiles": true
+                                }
+                            },
+                            "inputs": [
+                                {
+                                    "referenceName": "SqlProductTable",
+                                    "type": "DatasetReference"
+                                }
+                            ],
+                            "outputs": [
+                                {
+                                    "referenceName": "ADLSOutputDataset",
+                                    "type": "DatasetReference"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+}
