@@ -1,0 +1,88 @@
+# Import required libraries
+from pyspark.sql.functions import col
+
+# Load the CSV file into a DataFrame
+file_path = '/FileStore/tables/yellow_tripdata_2020_01.csv'
+df = spark.read.format('csv').option('header', 'true').option('inferSchema', 'true').load(file_path)
+
+# Display the DataFrame
+df.show(5)
+from pyspark.sql.functions import sum
+
+# Add a "Revenue" column
+df = df.withColumn('Revenue', col('fare_amount') + col('extra') + col('mta_tax') + col('improvement_surcharge') + col('tip_amount') + col('tolls_amount') + col('total_amount'))
+
+# Display the DataFrame with the new column
+df.select('Revenue', 'fare_amount', 'extra', 'mta_tax', 'improvement_surcharge', 'tip_amount', 'tolls_amount', 'total_amount').show(5)
+from pyspark.sql.functions import desc
+
+# Group by area (assuming area is indicated by pickup location)
+df_grouped_area = df.groupBy('PULocationID').agg(sum('passenger_count').alias('Total_Passengers')).orderBy(desc('Total_Passengers'))
+
+# Display the result
+df_grouped_area.show(5)
+# Group by vendor and calculate average fare and total earnings
+df_avg_earnings = df.groupBy('VendorID').agg(sum('total_amount').alias('Total_Earnings'), avg('fare_amount').alias('Average_Fare'))
+
+# Display the result for two vendors
+df_avg_earnings.show(2)
+# Group by payment type and count the number of payments
+df_payment_count = df.groupBy('payment_type').count().orderBy(desc('count'))
+
+# Display the result
+df_payment_count.show()
+from pyspark.sql.functions import date_format
+
+# Filter by date and group by vendor
+particular_date = '2020-01-01'
+df_filtered_date = df.filter(date_format(col('tpep_pickup_datetime'), 'yyyy-MM-dd') == particular_date)
+df_top_vendors = df_filtered_date.groupBy('VendorID').agg(sum('total_amount').alias('Total_Earnings'), sum('passenger_count').alias('Total_Passengers'), sum('trip_distance').alias('Total_Distance')).orderBy(desc('Total_Earnings')).limit(2)
+
+# Display the result
+df_top_vendors.show()
+# Group by pickup and dropoff locations and calculate total passengers
+df_route_passengers = df.groupBy('PULocationID', 'DOLocationID').agg(sum('passenger_count').alias('Total_Passengers')).orderBy(desc('Total_Passengers'))
+
+# Display the result
+df_route_passengers.show(1)
+from pyspark.sql.functions import unix_timestamp
+
+# Filter by latest timestamps (last 10 seconds in this example)
+current_time = df.agg(max('tpep_pickup_datetime')).collect()[0][0]
+time_threshold = current_time - expr('INTERVAL 10 SECONDS')
+
+df_latest = df.filter(unix_timestamp(col('tpep_pickup_datetime')) >= unix_timestamp(lit(time_threshold)))
+df_top_pickup = df_latest.groupBy('PULocationID').agg(sum('passenger_count').alias('Total_Passengers')).orderBy(desc('Total_Passengers'))
+
+# Display the result
+df_top_pickup.show()
+from pyspark.sql.functions import unix_timestamp
+
+# Filter by latest timestamps (last 10 seconds in this example)
+current_time = df.agg(max('tpep_pickup_datetime')).collect()[0][0]
+time_threshold = current_time - expr('INTERVAL 10 SECONDS')
+
+df_latest = df.filter(unix_timestamp(col('tpep_pickup_datetime')) >= unix_timestamp(lit(time_threshold)))
+df_top_pickup = df_latest.groupBy('PULocationID').agg(sum('passenger_count').alias('Total_Passengers')).orderBy(desc('Total_Passengers'))
+
+# Display the result
+df_top_pickup.show()
+from pyspark.sql.functions import json_tuple
+
+# Example JSON flattening
+# Assuming 'some_json_column' is the column with JSON data
+df_json = df.withColumn('json_data', json_tuple('some_json_column', 'field1', 'field2', 'field3'))
+df_flattened = df_json.select('json_data.*')
+
+# Display the flattened DataFrame
+df_flattened.show(5)
+# Write the DataFrame as a Parquet file
+output_path = '/FileStore/tables/flattened_data'
+df_flattened.write.parquet(output_path, mode='overwrite')
+
+# Create external table from Parquet file
+spark.sql(f"""
+    CREATE TABLE IF NOT EXISTS flattened_table
+    USING PARQUET
+    LOCATION '{output_path}'
+""")
